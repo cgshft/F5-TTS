@@ -725,7 +725,122 @@ def get_correct_audio_path(
     return file_audio
 
 
+# def create_metadata(name_project, ch_tokenizer, progress=gr.Progress()):
+#     path_project = os.path.join(path_data, name_project)
+#     path_project_wavs = os.path.join(path_project, "wavs")
+#     file_metadata = os.path.join(path_project, "metadata.csv")
+#     file_raw = os.path.join(path_project, "raw.arrow")
+#     file_duration = os.path.join(path_project, "duration.json")
+#     file_vocab = os.path.join(path_project, "vocab.txt")
+#
+#     if not os.path.isfile(file_metadata):
+#         return "The file was not found in " + file_metadata, ""
+#
+#     with open(file_metadata, "r", encoding="utf-8-sig") as f:
+#         data = f.read()
+#
+#     audio_path_list = []
+#     text_list = []
+#     duration_list = []
+#
+#     count = data.split("\n")
+#     lenght = 0
+#     result = []
+#     error_files = []
+#     text_vocab_set = set()
+#     for line in progress.tqdm(data.split("\n"), total=count):
+#         sp_line = line.split("|")
+#         if len(sp_line) != 2:
+#             continue
+#         name_audio, text = sp_line[:2]
+#
+#         file_audio = get_correct_audio_path(name_audio, path_project_wavs)
+#
+#         if not os.path.isfile(file_audio):
+#             error_files.append([file_audio, "error path"])
+#             continue
+#
+#         try:
+#             duration = get_audio_duration(file_audio)
+#         except Exception as e:
+#             error_files.append([file_audio, "duration"])
+#             print(f"Error processing {file_audio}: {e}")
+#             continue
+#
+#         if duration < 1 or duration > 30:
+#             if duration > 30:
+#                 error_files.append([file_audio, "duration > 30 sec"])
+#             if duration < 1:
+#                 error_files.append([file_audio, "duration < 1 sec "])
+#             continue
+#         if len(text) < 3:
+#             error_files.append([file_audio, "very short text length 3"])
+#             continue
+#
+#         text = text.strip()
+#         text = convert_char_to_pinyin([text], polyphone=True)[0]
+#
+#         audio_path_list.append(file_audio)
+#         duration_list.append(duration)
+#         text_list.append(text)
+#
+#         result.append({"audio_path": file_audio, "text": text, "duration": duration})
+#         if ch_tokenizer:
+#             text_vocab_set.update(list(text))
+#
+#         lenght += duration
+#
+#     if duration_list == []:
+#         return f"Error: No audio files found in the specified path : {path_project_wavs}", ""
+#
+#     min_second = round(min(duration_list), 2)
+#     max_second = round(max(duration_list), 2)
+#
+#     with ArrowWriter(path=file_raw) as writer:
+#         for line in progress.tqdm(result, total=len(result), desc="prepare data"):
+#             writer.write(line)
+#         writer.finalize()
+#
+#     with open(file_duration, "w") as f:
+#         json.dump({"duration": duration_list}, f, ensure_ascii=False)
+#
+#     new_vocal = ""
+#     if not ch_tokenizer:
+#         if not os.path.isfile(file_vocab):
+#             file_vocab_finetune = os.path.join(path_data, "Emilia_ZH_EN_pinyin/vocab.txt")
+#             if not os.path.isfile(file_vocab_finetune):
+#                 return "Error: Vocabulary file 'Emilia_ZH_EN_pinyin' not found!", ""
+#             shutil.copy2(file_vocab_finetune, file_vocab)
+#
+#         with open(file_vocab, "r", encoding="utf-8-sig") as f:
+#             vocab_char_map = {}
+#             for i, char in enumerate(f):
+#                 vocab_char_map[char[:-1]] = i
+#         vocab_size = len(vocab_char_map)
+#
+#     else:
+#         with open(file_vocab, "w", encoding="utf-8-sig") as f:
+#             for vocab in sorted(text_vocab_set):
+#                 f.write(vocab + "\n")
+#                 new_vocal += vocab + "\n"
+#         vocab_size = len(text_vocab_set)
+#
+#     if error_files != []:
+#         error_text = "\n".join([" = ".join(item) for item in error_files])
+#     else:
+#         error_text = ""
+#
+#     return (
+#         f"prepare complete \nsamples : {len(text_list)}\ntime data : {format_seconds_to_hms(lenght)}\nmin sec : {min_second}\nmax sec : {max_second}\nfile_arrow : {file_raw}\nvocab : {vocab_size}\n{error_text}",
+#         new_vocal,
+#     )
+
 def create_metadata(name_project, ch_tokenizer, progress=gr.Progress()):
+    # --- Start of new logging ---
+    print("\n--- [DEBUG] Starting create_metadata function ---")
+    print(f"[DEBUG] Received project name: '{name_project}'")
+    # --- End of new logging ---
+
     path_project = os.path.join(path_data, name_project)
     path_project_wavs = os.path.join(path_project, "wavs")
     file_metadata = os.path.join(path_project, "metadata.csv")
@@ -733,7 +848,15 @@ def create_metadata(name_project, ch_tokenizer, progress=gr.Progress()):
     file_duration = os.path.join(path_project, "duration.json")
     file_vocab = os.path.join(path_project, "vocab.txt")
 
+    # --- Start of new logging ---
+    print(f"[DEBUG] Expecting metadata file at: {file_metadata}")
+    print(f"[DEBUG] Expecting wavs folder at: {path_project_wavs}")
+    # --- End of new logging ---
+
     if not os.path.isfile(file_metadata):
+        # --- Start of new logging ---
+        print(f"[DEBUG] ERROR: Metadata file not found at {file_metadata}. Aborting.")
+        # --- End of new logging ---
         return "The file was not found in " + file_metadata, ""
 
     with open(file_metadata, "r", encoding="utf-8-sig") as f:
@@ -743,21 +866,38 @@ def create_metadata(name_project, ch_tokenizer, progress=gr.Progress()):
     text_list = []
     duration_list = []
 
-    count = data.split("\n")
+    lines = data.strip().split("\n")
+    # --- Start of new logging ---
+    print(f"[DEBUG] Found {len(lines)} lines in metadata.csv.")
+    # --- End of new logging ---
+
     lenght = 0
     result = []
     error_files = []
     text_vocab_set = set()
-    for line in progress.tqdm(data.split("\n"), total=count):
+    for i, line in enumerate(progress.tqdm(lines, total=len(lines))):
         sp_line = line.split("|")
         if len(sp_line) != 2:
+            # --- Start of new logging ---
+            if i < 5: # Log first 5 malformed lines to avoid spam
+                print(f"[DEBUG] WARNING: Skipping malformed line #{i+1}: '{line}'")
+            # --- End of new logging ---
             continue
         name_audio, text = sp_line[:2]
 
-        file_audio = get_correct_audio_path(name_audio, path_project_wavs)
+        file_audio = get_correct_audio_path(name_audio.strip(), path_project_wavs)
+
+        # --- Start of new logging ---
+        if i == 0: # Log the first processed audio path to see an example
+            print(f"[DEBUG] Processing line #{i+1}: name_audio='{name_audio}', resolved_path='{file_audio}'")
+        # --- End of new logging ---
 
         if not os.path.isfile(file_audio):
             error_files.append([file_audio, "error path"])
+            # --- Start of new logging ---
+            if len(error_files) < 10: # Log first 10 file not found errors
+                print(f"[DEBUG] ERROR: Audio file not found at '{file_audio}'")
+            # --- End of new logging ---
             continue
 
         try:
@@ -790,7 +930,14 @@ def create_metadata(name_project, ch_tokenizer, progress=gr.Progress()):
 
         lenght += duration
 
+    # --- Start of new logging ---
+    print(f"[DEBUG] Finished processing metadata. Found {len(duration_list)} valid audio files.")
+    # --- End of new logging ---
+
     if duration_list == []:
+        # --- Start of new logging ---
+        print(f"[DEBUG] CRITICAL ERROR: No valid audio files were found after processing the metadata. The `duration_list` is empty.")
+        # --- End of new logging ---
         return f"Error: No audio files found in the specified path : {path_project_wavs}", ""
 
     min_second = round(min(duration_list), 2)
@@ -830,11 +977,15 @@ def create_metadata(name_project, ch_tokenizer, progress=gr.Progress()):
     else:
         error_text = ""
 
+    # --- Start of new logging ---
+    print("[DEBUG] create_metadata function completed successfully.")
+    print("--- End of [DEBUG] ---")
+    # --- End of new logging ---
+
     return (
         f"prepare complete \nsamples : {len(text_list)}\ntime data : {format_seconds_to_hms(lenght)}\nmin sec : {min_second}\nmax sec : {max_second}\nfile_arrow : {file_raw}\nvocab : {vocab_size}\n{error_text}",
         new_vocal,
     )
-
 
 def check_user(value):
     return gr.update(visible=not value), gr.update(visible=value)
@@ -1045,6 +1196,8 @@ def vocab_extend(project_name, symbols, model_type):
         ckpt_path = str(cached_path("hf://SWivid/F5-TTS/F5TTS_Base/model_1200000.pt"))
     elif model_type == "E2TTS_Base":
         ckpt_path = str(cached_path("hf://SWivid/E2-TTS/E2TTS_Base/model_1200000.pt"))
+    elif model_type == "OpenF5TTS_Base":
+        ckpt_path = str(cached_path("hf://mrfakename/OpenF5-TTS-Base/model.pt"))
 
     vocab_size_new = len(miss_symbols)
 
@@ -1446,7 +1599,7 @@ Using the extended model, you can finetune to a new language that is missing sym
 ```""")
 
             exp_name_extend = gr.Radio(
-                label="Model", choices=["F5TTS_v1_Base", "F5TTS_Base", "E2TTS_Base"], value="F5TTS_v1_Base"
+                label="Model", choices=["F5TTS_v1_Base", "F5TTS_Base", "E2TTS_Base", "OpenF5TTS_Base"], value="OpenF5TTS_Base"
             )
 
             with gr.Row():
@@ -1524,7 +1677,7 @@ The auto-setting is still experimental. Set a large value of epoch if not sure; 
 If you encounter a memory error, try reducing the batch size per GPU to a smaller number.
 ```""")
             with gr.Row():
-                exp_name = gr.Radio(label="Model", choices=["F5TTS_v1_Base", "F5TTS_Base", "E2TTS_Base"])
+                exp_name = gr.Radio(label="Model", choices=["F5TTS_v1_Base", "F5TTS_Base", "E2TTS_Base", "OpenF5TTS_Base"])
                 tokenizer_file = gr.Textbox(label="Tokenizer File")
                 file_checkpoint_train = gr.Textbox(label="Path to the Pretrained Checkpoint")
 
@@ -1756,7 +1909,7 @@ If you encounter a memory error, try reducing the batch size per GPU to a smalle
 Check the use_ema setting (True or False) for your model to see what works best for you. Set seed to -1 for random.
 ```""")
             exp_name = gr.Radio(
-                label="Model", choices=["F5TTS_v1_Base", "F5TTS_Base", "E2TTS_Base"], value="F5TTS_v1_Base"
+                label="Model", choices=["F5TTS_v1_Base", "F5TTS_Base", "E2TTS_Base", "OpenF5TTS_Base"], value="OpenF5TTS_Base"
             )
             list_checkpoints, checkpoint_select = get_checkpoints_project(projects_selelect, False)
 
@@ -1864,3 +2017,5 @@ def main(port, host, share, api):
 
 if __name__ == "__main__":
     main()
+
+    
